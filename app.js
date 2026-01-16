@@ -1,5 +1,5 @@
 // ====== CONFIG ======
-const API_URL = "https://script.google.com/macros/s/AKfycbx5qpQ_1gi9DSRgCSLrt8opWrWvNE3Wkl089ekNXcyD6uegazM3C2dR4-TPVpsaT8PVzQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwZFy95gkOZ1ZfGgdGrD_1Vbsg3GFeZcuFNu31SnMx9pOW9J1z-Xi4KToz0n71eck2FzA/exec";
 
 // Risk rules (you can tune later)
 const RULES = {

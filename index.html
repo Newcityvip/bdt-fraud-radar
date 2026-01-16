@@ -19,7 +19,7 @@
     }
     button:hover { background:#f6f6f6; }
     .status { color:#b42318; font-weight:600; margin-right:10px; }
-    .filters { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 16px; }
+    .filters { display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px; margin-top: 16px; }
     label { font-size: 12px; color:#444; display:block; margin-bottom:6px; }
     input, select {
       width: 100%;
@@ -65,6 +65,11 @@
     </div>
 
     <div class="filters">
+      <div>
+        <label>Days (Lookback)</label>
+        <input id="days" type="number" value="3" min="1" />
+      </div>
+
       <div>
         <label>Min Risk Score</label>
         <input id="minScore" type="number" value="3" min="0" />
@@ -118,8 +123,8 @@
   </div>
 
   <script>
-    // ✅ UPDATED API URL (your new working webapp)
-    const API_BASE = "https://script.google.com/macros/s/AKfycbzZ8wGr9nBCwCFS80Np6jkWjFnP8Hld1R334rArXjAPQf3pk2OceNgRQeP5vaIjmTIqXA/exec";
+    // ✅ Put your CURRENT WebApp URL here (the one you tested)
+    const API_BASE = "https://script.google.com/macros/s/AKfycbwWw2IpROB8KdKcWGJtuBtUJg4JuRNiGJy09vEkFjllIOdrlU85SX7XLpL_Mahn-YDM8A/exec";
 
     const $ = (id) => document.getElementById(id);
 
@@ -206,7 +211,7 @@
         tbody.appendChild(tr);
       });
 
-      setStatus(`Loaded ${allRows.length} rows (showing ${rows.length})`, false);
+      setStatus(`Loaded ${allRows.length} suspects (showing ${rows.length})`, false);
     }
 
     async function loadAllPages(){
@@ -214,14 +219,18 @@
       allRows = [];
       renderTable();
 
-      const minScore = parseInt($("minScore").value || "3", 10);
+      const days = parseInt($("days").value || "3", 10);
+
+      // ✅ IMPORTANT: fetch all suspects (minScore=1) then UI controls filter
+      const apiMinScore = 1;
+
       setStatus("Loading...", false);
 
       while(true){
         const url = buildUrl({
           format: "json",
-          minScore,
-          days: 3,
+          days,
+          minScore: apiMinScore,
           limit: LIMIT,
           offset
         });
@@ -237,10 +246,11 @@
         offset += rows.length;
 
         renderTable();
+
         if(!data.has_more) break;
       }
 
-      setStatus(`DONE ✅ Total ${allRows.length} rows`, false);
+      setStatus(`DONE ✅ Total ${allRows.length} suspects`, false);
     }
 
     function exportCSV(){
@@ -280,6 +290,7 @@
 
       $("exportBtn").addEventListener("click", exportCSV);
 
+      $("days").addEventListener("input", () => {});
       $("minScore").addEventListener("input", renderTable);
       $("riskLevel").addEventListener("change", renderTable);
       $("searchUser").addEventListener("input", renderTable);

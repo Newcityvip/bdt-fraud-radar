@@ -118,7 +118,7 @@
   </div>
 
   <script>
-    // ✅ YOUR API URL
+    // ✅ UPDATED API URL (your new working webapp)
     const API_BASE = "https://script.google.com/macros/s/AKfycbzZ8wGr9nBCwCFS80Np6jkWjFnP8Hld1R334rArXjAPQf3pk2OceNgRQeP5vaIjmTIqXA/exec";
 
     const $ = (id) => document.getElementById(id);
@@ -171,11 +171,8 @@
       return rows.filter(r => {
         const rs = Number(r.riskScore || 0);
         if (rs < minScore) return false;
-
         if (riskLevel !== "ALL" && (String(r.riskLevel || "").toUpperCase() !== riskLevel)) return false;
-
         if (q && !String(r.username || "").toLowerCase().includes(q)) return false;
-
         return true;
       });
     }
@@ -218,14 +215,13 @@
       renderTable();
 
       const minScore = parseInt($("minScore").value || "3", 10);
-
       setStatus("Loading...", false);
 
       while(true){
         const url = buildUrl({
           format: "json",
           minScore,
-          days: 3,        // ✅ fixed days = 3 (change later if needed)
+          days: 3,
           limit: LIMIT,
           offset
         });
@@ -241,7 +237,6 @@
         offset += rows.length;
 
         renderTable();
-
         if(!data.has_more) break;
       }
 
@@ -278,7 +273,6 @@
       URL.revokeObjectURL(url);
     }
 
-    // ✅ events
     window.addEventListener("DOMContentLoaded", () => {
       $("reloadBtn").addEventListener("click", () => {
         loadAllPages().catch(err => setStatus("Error: " + err.message, true));
@@ -290,7 +284,6 @@
       $("riskLevel").addEventListener("change", renderTable);
       $("searchUser").addEventListener("input", renderTable);
 
-      // auto load on open
       loadAllPages().catch(err => setStatus("Error: " + err.message, true));
     });
   </script>

@@ -1,129 +1,348 @@
-// === IMPORTANT: put your Apps Script web app URL here ===
-const API_URL = "https://script.google.com/macros/s/AKfycbz-0K46B3G1lJpO83kAKkhdkywwgDNOOaqLQCY8_8Kz_7lt8W3Ca1D-w06VokuB2ThOXg/exec";
+// ====== CONFIG ======
+const API_URL = "https://script.google.com/macros/s/AKfycbx5qpQ_1gi9DSRgCSLrt8opWrWvNE3Wkl089ekNXcyD6uegazM3C2dR4-TPVpsaT8PVzQ/exec";
 
-let lastRows = [];
+// Risk rules (you can tune later)
+const RULES = {
+  MIN_SCORE_DEFAULT: 3,
+  SHARED_BANK_MIN_USERS: 2,
+  SHARED_IP_MIN_USERS: 3,
+  FAST_WITHDRAW_HOURS: 6,
+  NET_PROFIT_MIN: 5000,
+};
 
-const $ = (id) => document.getElementById(id);
+// ====== UI ======
+const elStatus = document.getElementById("status");
+const tbody = document.getElementById("tbody");
+const minScoreEl = document.getElementById("minScore");
+const riskLevelEl = document.getElementById("riskLevel");
+const searchUserEl = document.getElementById("searchUser");
 
-function setStatus(msg) { $("status").textContent = msg || ""; }
-function setErr(msg) { $("err").textContent = msg || ""; }
+document.getElementById("reloadBtn").addEventListener("click", load);
+document.getElementById("exportBtn").addEventListener("click", exportCSV);
 
-function fmt(v) {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "number") return v.toLocaleString();
-  return String(v);
+minScoreEl.value = RULES.MIN_SCORE_DEFAULT;
+[minScoreEl, riskLevelEl, searchUserEl].forEach(el => el.addEventListener("input", render));
+
+// ====== JSONP Loader (bypass CORS) ======
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = "cb_" + Math.random().toString(36).slice(2);
+    const script = document.createElement("script");
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("JSONP timeout"));
+    }, 20000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[cbName];
+      script.remove();
+    }
+
+    window[cbName] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    script.src = url + (url.includes("?") ? "&" : "?") + "callback=" + cbName;
+    script.onerror = () => { cleanup(); reject(new Error("JSONP load failed")); };
+    document.body.appendChild(script);
+  });
 }
 
-function toLocal(dt) {
-  if (!dt) return "";
-  const d = new Date(dt);
-  if (isNaN(d.getTime())) return String(dt);
-  return d.toLocaleString();
+// ====== DATA ======
+let fullRows = []; // computed fraud rows
+
+function num(x) {
+  const n = parseFloat(String(x || "").replace(/,/g, ""));
+  return isNaN(n) ? 0 : n;
 }
 
-async function loadData() {
-  setErr("");
-  setStatus("Loading...");
+function parseTime(s) {
+  // your sheet times look like "1/16/2026 13:14" or "2026/01/16 13:14:00"
+  const t = new Date(s);
+  return isNaN(t.getTime()) ? null : t;
+}
 
-  const days = Number($("days").value || 3);
-  const minScore = Number($("minScore").value || 5);
-  const limit = Number($("limit").value || 500);
+function hoursBetween(a, b) {
+  if (!a || !b) return null;
+  return Math.abs(b.getTime() - a.getTime()) / 36e5;
+}
 
-  const url = `${API_URL}?days=${encodeURIComponent(days)}&minScore=${encodeURIComponent(minScore)}&limit=${encodeURIComponent(limit)}&t=${Date.now()}`;
+// ====== MAIN ======
+async function load() {
+  elStatus.textContent = "Loading data from API...";
+  tbody.innerHTML = "";
 
   try {
-    const res = await fetch(url, { cache: "no-store" });
-    const text = await res.text();
+    const data = await jsonp(API_URL);
+    if (!data || !data.ok) throw new Error(data?.error || "API returned error");
 
-    // try parse JSON
-    let data;
-    try { data = JSON.parse(text); }
-    catch (e) {
-      throw new Error("API did not return JSON. Response was:\n\n" + text.slice(0, 800));
-    }
+    const deposit = data.deposit?.rows || [];
+    const withdraw = data.withdraw?.rows || [];
+    const member = data.member?.rows || [];
 
-    if (!data.ok) {
-      throw new Error("API Error: " + (data.error || "Unknown") + "\n" + (data.stack || ""));
-    }
+    fullRows = buildFraudRows({ deposit, withdraw, member });
+    elStatus.textContent = `Loaded. Candidates: ${fullRows.length}`;
+    render();
 
-    lastRows = data.rows || [];
-    renderTable(lastRows);
-
-    setStatus(`Loaded ${lastRows.length} records (minScore=${minScore}, days=${days})`);
-  } catch (err) {
-    lastRows = [];
-    renderTable([]);
-    setErr(String(err.message || err));
-    setStatus("Failed");
+  } catch (e) {
+    console.error(e);
+    elStatus.textContent = "Error: " + e.message;
   }
 }
 
-function renderTable(rows) {
-  const tb = $("tbody");
-  tb.innerHTML = "";
+function buildFraudRows({ deposit, withdraw, member }) {
+  // ---- Build per-user aggregates ----
+  const u = {}; // username -> stats
 
-  for (const r of rows) {
-    const tr = document.createElement("tr");
-    const reasons = Array.isArray(r.reasons) ? r.reasons.join(" • ") : "";
-
-    tr.innerHTML = `
-      <td>${fmt(r.username)}</td>
-      <td><span class="pill ${fmt(r.riskLevel)}">${fmt(r.riskLevel)}</span></td>
-      <td>${fmt(r.riskScore)}</td>
-      <td class="reasons">${fmt(reasons)}</td>
-      <td>${fmt(r.action)}</td>
-      <td>${fmt(r.totalDep)}</td>
-      <td>${fmt(r.totalWd)}</td>
-      <td>${fmt(r.netProfit)}</td>
-      <td>${fmt(r.depToWdHours)}</td>
-      <td>${fmt(r.night)}</td>
-      <td>${fmt(r.bankWallet)}</td>
-      <td>${fmt(r.bankCount)}</td>
-      <td>${fmt(r.ip)}</td>
-      <td>${fmt(r.ipCount)}</td>
-      <td>${fmt(r.vip)}</td>
-      <td>${toLocal(r.regTime)}</td>
-      <td>${toLocal(r.lastBetTime)}</td>
-      <td>${fmt(r.channel)}</td>
-    `;
-    tb.appendChild(tr);
+  function ensure(user) {
+    const key = String(user || "").trim();
+    if (!key) return null;
+    if (!u[key]) {
+      u[key] = {
+        username: key,
+        depTotal: 0, depCnt: 0, depFirst: null,
+        wdTotal: 0, wdCnt: 0, wdFirst: null,
+        banks: new Set(),
+        ip: "",
+        vip: "",
+        accountStatus: "",
+      };
+    }
+    return u[key];
   }
+
+  // Deposit fields (based on your RAW headers)
+  for (const r of deposit) {
+    const user = ensure(r["Username"]);
+    if (!user) continue;
+    user.depTotal += num(r["Deposit Amount"] || r["Deposit amount"]);
+    user.depCnt += 1;
+    const t = parseTime(r["Created Time"]);
+    if (t && (!user.depFirst || t < user.depFirst)) user.depFirst = t;
+
+    const bank = String(r["From Bank Acc No"] || r["From Wallet/Account No"] || "").trim();
+    if (bank) user.banks.add(bank);
+  }
+
+  // Withdrawal fields (based on your RAW headers)
+  for (const r of withdraw) {
+    const user = ensure(r["Username"]);
+    if (!user) continue;
+    user.wdTotal += num(r["Withdrawal Amount"] || r["Amount"]);
+    user.wdCnt += 1;
+    const t = parseTime(r["Created Time"]);
+    if (t && (!user.wdFirst || t < user.wdFirst)) user.wdFirst = t;
+
+    const bank = String(r["Bank Acc No"] || r["Bank Account / Wallet"] || "").trim();
+    if (bank) user.banks.add(bank);
+  }
+
+  // Member fields (based on your RAW headers)
+  for (const r of member) {
+    const user = ensure(r["Username"]);
+    if (!user) continue;
+    user.ip = String(r["Last Login IP"] || "").trim();
+    user.vip = String(r["VIP"] || "").trim();
+    user.accountStatus = String(r["Account Status"] || r["Status"] || "").trim();
+  }
+
+  // ---- Shared Bank Map ----
+  const bankToUsers = new Map(); // bank -> Set(users)
+  for (const k of Object.keys(u)) {
+    for (const b of u[k].banks) {
+      if (!bankToUsers.has(b)) bankToUsers.set(b, new Set());
+      bankToUsers.get(b).add(k);
+    }
+  }
+
+  // ---- Shared IP Map ----
+  const ipToUsers = new Map(); // ip -> Set(users)
+  for (const k of Object.keys(u)) {
+    const ip = u[k].ip;
+    if (!ip) continue;
+    if (!ipToUsers.has(ip)) ipToUsers.set(ip, new Set());
+    ipToUsers.get(ip).add(k);
+  }
+
+  // ---- Compute Risk Rows ----
+  const out = [];
+  for (const k of Object.keys(u)) {
+    const s = u[k];
+
+    // shared bank users = max shared users count across any bank
+    let sharedBankUsers = 0;
+    for (const b of s.banks) {
+      sharedBankUsers = Math.max(sharedBankUsers, (bankToUsers.get(b)?.size || 0));
+    }
+
+    const sharedIPUsers = s.ip ? (ipToUsers.get(s.ip)?.size || 0) : 0;
+
+    const net = s.depTotal - s.wdTotal;
+    const fastHrs = (s.depFirst && s.wdFirst) ? hoursBetween(s.depFirst, s.wdFirst) : null;
+    const fastWithdraw = fastHrs !== null && fastHrs <= RULES.FAST_WITHDRAW_HOURS;
+
+    // ---- scoring (simple + effective) ----
+    let score = 0;
+    const reasons = [];
+
+    if (sharedBankUsers >= RULES.SHARED_BANK_MIN_USERS && sharedBankUsers > 1) {
+      score += 3;
+      reasons.push(`Shared bank account with ${sharedBankUsers - 1} other user(s)`);
+    }
+
+    if (sharedIPUsers >= RULES.SHARED_IP_MIN_USERS && sharedIPUsers > 1) {
+      score += 2;
+      reasons.push(`Shared login IP with ${sharedIPUsers - 1} other user(s)`);
+    }
+
+    if (fastWithdraw) {
+      score += 2;
+      reasons.push(`Fast withdraw (${fastHrs.toFixed(1)}h) after first deposit`);
+    }
+
+    if (net <= -RULES.NET_PROFIT_MIN) {
+      // withdrew much more than deposited
+      score += 3;
+      reasons.push(`Net negative beyond threshold (${net.toFixed(2)})`);
+    }
+
+    if (s.wdCnt >= 3 && s.depCnt <= 1) {
+      score += 2;
+      reasons.push(`Many withdrawals with low deposit count (wd ${s.wdCnt} vs dep ${s.depCnt})`);
+    }
+
+    // Decide risk level
+    let level = "LOW";
+    if (score >= 6) level = "HIGH";
+    else if (score >= 3) level = "MEDIUM";
+
+    // ✅ Only keep “possible fraud”
+    if (score >= RULES.MIN_SCORE_DEFAULT) {
+      out.push({
+        username: s.username,
+        score,
+        level,
+        reasons: reasons.join(" | "),
+        depTotal: s.depTotal,
+        wdTotal: s.wdTotal,
+        net,
+        depCnt: s.depCnt,
+        wdCnt: s.wdCnt,
+        uniqueBanks: s.banks.size,
+        sharedBankUsers,
+        sharedIPUsers,
+        fastWithdraw: fastWithdraw ? "YES" : "NO",
+        accountStatus: s.accountStatus,
+        vip: s.vip,
+      });
+    }
+  }
+
+  // Sort highest risk first
+  out.sort((a, b) => b.score - a.score || b.net - a.net);
+  return out;
+}
+
+function render() {
+  const minScore = num(minScoreEl.value) || RULES.MIN_SCORE_DEFAULT;
+  const riskLevel = riskLevelEl.value;
+  const q = String(searchUserEl.value || "").trim().toLowerCase();
+
+  const rows = fullRows.filter(r => {
+    if (r.score < minScore) return false;
+    if (riskLevel !== "ALL" && r.level !== riskLevel) return false;
+    if (q && !r.username.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  tbody.innerHTML = rows.map(r => {
+    return `
+      <tr>
+        <td><b>${escapeHtml(r.username)}</b></td>
+        <td>${r.score}</td>
+        <td><span class="badge ${r.level}">${r.level}</span></td>
+        <td class="small">${escapeHtml(r.reasons || "-")}</td>
+        <td>${fmt(r.depTotal)}</td>
+        <td>${fmt(r.wdTotal)}</td>
+        <td>${fmt(r.net)}</td>
+        <td>${r.depCnt}</td>
+        <td>${r.wdCnt}</td>
+        <td>${r.uniqueBanks}</td>
+        <td>${r.sharedBankUsers}</td>
+        <td>${r.sharedIPUsers}</td>
+        <td>${r.fastWithdraw}</td>
+        <td>${escapeHtml(r.accountStatus || "")}</td>
+        <td>${escapeHtml(r.vip || "")}</td>
+      </tr>
+    `;
+  }).join("");
+
+  elStatus.textContent = `Showing ${rows.length} / ${fullRows.length} candidates`;
 }
 
 function exportCSV() {
-  if (!lastRows.length) {
-    alert("No data to export");
-    return;
-  }
+  const minScore = num(minScoreEl.value) || RULES.MIN_SCORE_DEFAULT;
+  const riskLevel = riskLevelEl.value;
+  const q = String(searchUserEl.value || "").trim().toLowerCase();
+
+  const rows = fullRows.filter(r => {
+    if (r.score < minScore) return false;
+    if (riskLevel !== "ALL" && r.level !== riskLevel) return false;
+    if (q && !r.username.toLowerCase().includes(q)) return false;
+    return true;
+  });
 
   const headers = [
-    "username","riskLevel","riskScore","reasons","action","totalDep","totalWd","netProfit","depToWdHours",
-    "night","bankWallet","bankCount","ip","ipCount","vip","regTime","lastBetTime","channel"
+    "Username","Risk Score","Risk Level","Reasons",
+    "Total Deposit","Total Withdrawal","Net",
+    "Deposit Count","Withdrawal Count",
+    "Unique Banks","Shared Bank Users","Shared IP Users",
+    "Fast Withdraw","Account Status","VIP"
   ];
 
-  const lines = [];
-  lines.push(headers.join(","));
-
-  for (const r of lastRows) {
-    const row = headers.map((h) => {
-      let v = r[h];
-      if (h === "reasons" && Array.isArray(v)) v = v.join(" | ");
-      if (v === null || v === undefined) v = "";
-      v = String(v).replaceAll('"', '""');
-      return `"${v}"`;
-    });
-    lines.push(row.join(","));
+  const lines = [headers.join(",")];
+  for (const r of rows) {
+    const line = [
+      r.username, r.score, r.level, r.reasons,
+      r.depTotal, r.wdTotal, r.net,
+      r.depCnt, r.wdCnt,
+      r.uniqueBanks, r.sharedBankUsers, r.sharedIPUsers,
+      r.fastWithdraw, r.accountStatus, r.vip
+    ].map(csvSafe).join(",");
+    lines.push(line);
   }
 
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `fraud_alerts_${new Date().toISOString().slice(0,10)}.csv`;
+  a.href = url;
+  a.download = "bdt_fraud_candidates.csv";
+  document.body.appendChild(a);
   a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
-$("btnLoad").addEventListener("click", loadData);
-$("btnExport").addEventListener("click", exportCSV);
+function csvSafe(v) {
+  const s = String(v ?? "");
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+function fmt(n) {
+  const x = Number(n || 0);
+  return x.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
 
-// Auto-load on open
-loadData();
+// auto load
+load();

@@ -92,7 +92,7 @@
     </div>
 
     <div class="small" style="margin-top:10px;">
-      Tip: This dashboard loads data in pages (300 rows per page) to avoid timeout.
+      Tip: Loads in pages (300 rows per page). If you want more/fewer, change LIMIT in code.
     </div>
 
     <div class="tableWrap">
@@ -123,13 +123,15 @@
   </div>
 
   <script>
-    // ✅ Put your CURRENT WebApp URL here (the one you tested)
+    // ✅ YOUR FINAL API URL (the one you just tested)
     const API_BASE = "https://script.google.com/macros/s/AKfycbwWw2IpROB8KdKcWGJtuBtUJg4JuRNiGJy09vEkFjllIOdrlU85SX7XLpL_Mahn-YDM8A/exec";
 
     const $ = (id) => document.getElementById(id);
 
     let allRows = [];
     let offset = 0;
+
+    // ✅ set 300 for speed, can go 500 max (API limit)
     const LIMIT = 300;
 
     function setStatus(msg, isError=false){
@@ -185,6 +187,7 @@
     function renderTable(){
       const tbody = $("tableBody");
       if(!tbody) return;
+
       const rows = applyClientFilters(allRows);
 
       tbody.innerHTML = "";
@@ -221,7 +224,9 @@
 
       const days = parseInt($("days").value || "3", 10);
 
-      // ✅ IMPORTANT: fetch all suspects (minScore=1) then UI controls filter
+      // ✅ IMPORTANT:
+      // Fetch minScore=1 from API (so we get all suspects),
+      // then you use UI minScore to filter.
       const apiMinScore = 1;
 
       setStatus("Loading...", false);
@@ -247,7 +252,16 @@
 
         renderTable();
 
+        // ✅ progress display
+        setStatus(`Loading... ${allRows.length} rows`, false);
+
         if(!data.has_more) break;
+
+        // safety stop (avoid browser crash if too huge)
+        if (allRows.length >= 50000) {
+          setStatus(`Stopped at 50,000 rows to avoid crash. Increase filters (Days / Min Score).`, true);
+          break;
+        }
       }
 
       setStatus(`DONE ✅ Total ${allRows.length} suspects`, false);
@@ -290,11 +304,11 @@
 
       $("exportBtn").addEventListener("click", exportCSV);
 
-      $("days").addEventListener("input", () => {});
       $("minScore").addEventListener("input", renderTable);
       $("riskLevel").addEventListener("change", renderTable);
       $("searchUser").addEventListener("input", renderTable);
 
+      // auto load on open
       loadAllPages().catch(err => setStatus("Error: " + err.message, true));
     });
   </script>

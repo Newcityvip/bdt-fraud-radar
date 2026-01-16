@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>BDT Fraud Radar</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+    th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; }
+    th { background: #222; color: #fff; }
+    .high { background:#ffcccc; }
+    .medium { background:#fff3cd; }
+  </style>
+</head>
+<body>
+
+<h2>🚨 Possible Fraud Accounts</h2>
+<button onclick="exportCSV()">Export CSV</button>
+
+<table id="fraudTable"></table>
+
+<script src="app.js"></script>
+</body>
+</html>

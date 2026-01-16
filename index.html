@@ -1,24 +1,75 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>BDT Fraud Radar</title>
   <style>
-    body { font-family: Arial; padding: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 15px; }
-    th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; }
-    th { background: #222; color: #fff; }
-    .high { background:#ffcccc; }
-    .medium { background:#fff3cd; }
+    body { font-family: Arial, sans-serif; padding: 18px; }
+    h1 { margin: 0 0 12px; }
+    .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0 16px; }
+    input, select { padding:8px; }
+    button { padding:8px 12px; cursor:pointer; }
+    .muted { color:#666; font-size: 12px; }
+    .error { color:#b00020; margin-top:10px; white-space:pre-wrap; }
+    table { width:100%; border-collapse:collapse; margin-top:14px; }
+    th, td { border:1px solid #ddd; padding:8px; font-size: 13px; vertical-align: top; }
+    th { background:#f5f5f5; position: sticky; top: 0; }
+    .pill { padding:2px 8px; border-radius:999px; font-size:12px; display:inline-block; }
+    .HIGH { background:#ffd6d6; }
+    .MEDIUM { background:#fff2cc; }
+    .LOW { background:#d6ffe1; }
+    .reasons { max-width: 420px; }
   </style>
 </head>
 <body>
+  <h1>🚨 Possible Fraud Accounts</h1>
 
-<h2>🚨 Possible Fraud Accounts</h2>
-<button onclick="exportCSV()">Export CSV</button>
+  <div class="bar">
+    <label>Days:
+      <input id="days" type="number" value="3" min="1" style="width:80px" />
+    </label>
+    <label>Min Score:
+      <input id="minScore" type="number" value="5" min="0" style="width:90px" />
+    </label>
+    <label>Limit:
+      <input id="limit" type="number" value="500" min="1" style="width:100px" />
+    </label>
+    <button id="btnLoad">Load</button>
+    <button id="btnExport">Export CSV</button>
+    <span class="muted" id="status"></span>
+  </div>
 
-<table id="fraudTable"></table>
+  <div class="error" id="err"></div>
 
-<script src="app.js"></script>
+  <div style="overflow:auto; max-height: 70vh;">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Risk</th>
+          <th>Score</th>
+          <th>Reasons</th>
+          <th>Action</th>
+          <th>Total Dep</th>
+          <th>Total Wd</th>
+          <th>Net Profit</th>
+          <th>Dep→Wd (hrs)</th>
+          <th>Night</th>
+          <th>Bank</th>
+          <th>Bank Count</th>
+          <th>IP</th>
+          <th>IP Count</th>
+          <th>VIP</th>
+          <th>RegTime</th>
+          <th>LastBet</th>
+          <th>Channel</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <script src="./app.js"></script>
 </body>
 </html>

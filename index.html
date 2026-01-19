@@ -4,295 +4,124 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>BDT Fraud Radar</title>
-
-  <style>
-    :root { color-scheme: light; }
-    body { font-family: Arial, sans-serif; margin: 0; background: #fff; color:#111; }
-    .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
-    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-    h1 { font-size: 28px; margin: 0; display:flex; align-items:center; gap:10px; }
-    .badge { font-size: 12px; padding: 4px 8px; border:1px solid #ddd; border-radius:999px; color:#333; }
-    .actions { display:flex; align-items:center; gap:10px; }
-    button {
-      border:1px solid #ccc; background:#fff; padding:10px 14px;
-      border-radius:10px; cursor:pointer;
-    }
-    button:hover { background:#f6f6f6; }
-    .status { color:#b42318; font-weight:600; margin-right:10px; }
-    .filters { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 16px; }
-    label { font-size: 12px; color:#444; display:block; margin-bottom:6px; }
-    input, select {
-      width: 100%;
-      padding: 10px 12px;
-      border:1px solid #ccc;
-      border-radius: 10px;
-      outline:none;
-      font-size:14px;
-    }
-    .tableWrap { margin-top: 16px; border:1px solid #ddd; border-radius: 12px; overflow:auto; }
-    table { width:100%; border-collapse: collapse; font-size: 13px; }
-    thead th {
-      background:#f7f7f7;
-      text-align:left;
-      padding: 10px;
-      border-bottom:1px solid #ddd;
-      white-space:nowrap;
-    }
-    tbody td { padding: 10px; border-bottom:1px solid #eee; vertical-align: top; }
-    tbody tr:hover { background:#fafafa; }
-    .pill {
-      display:inline-block; padding: 3px 8px; border-radius:999px; font-size: 12px;
-      border:1px solid #ddd;
-    }
-    .pill.low { background:#ecfdf3; border-color:#a6f4c5; }
-    .pill.med { background:#fffaeb; border-color:#fedf89; }
-    .pill.high { background:#fef3f2; border-color:#fda29b; }
-    .muted { color:#666; }
-    .small { font-size:12px; color:#666; }
-  </style>
+  <link rel="stylesheet" href="./style.css" />
 </head>
-
 <body>
   <div class="wrap">
-    <div class="topbar">
-      <h1>🚨 BDT Fraud Radar <span class="badge">Fast (No JSONP)</span></h1>
+    <div class="card">
+      <div class="topbar">
+        <div class="brand">
+          <div class="logo">🚨</div>
+          <div>
+            <div class="titleRow">
+              <h1>BDT Fraud Radar</h1>
+              <span class="badge">Pro Table</span>
+            </div>
+            <div class="sub">Focus: accounts that need attention (MED/HIGH by default).</div>
+          </div>
+        </div>
 
-      <div class="actions">
-        <span class="status" id="statusText"></span>
-        <button id="reloadBtn">Reload</button>
-        <button id="exportBtn">Export CSV</button>
-      </div>
-    </div>
-
-    <div class="filters">
-      <div>
-        <label>Min Risk Score</label>
-        <input id="minScore" type="number" value="3" min="0" />
-      </div>
-
-      <div>
-        <label>Risk Level</label>
-        <select id="riskLevel">
-          <option value="ALL">ALL</option>
-          <option value="LOW">LOW</option>
-          <option value="MED">MED</option>
-          <option value="HIGH">HIGH</option>
-        </select>
+        <div class="actions">
+          <div id="status" class="status">Ready</div>
+          <button id="reloadBtn" class="btn">Reload</button>
+          <button id="exportBtn" class="btn">Export CSV</button>
+          <button id="columnsBtn" class="btn">Columns</button>
+        </div>
       </div>
 
-      <div>
-        <label>Search Username</label>
-        <input id="searchUser" placeholder="type username..." />
+      <div class="filters">
+        <div class="field">
+          <label>Days (Lookback)</label>
+          <input id="days" type="number" min="1" max="30" value="3" />
+        </div>
+
+        <div class="field">
+          <label>Min Risk Score</label>
+          <input id="minScore" type="number" min="0" value="3" />
+        </div>
+
+        <div class="field">
+          <label>Risk Level</label>
+          <select id="riskLevel">
+            <option value="ATTN">ATTN (MED/HIGH)</option>
+            <option value="ALL">ALL</option>
+            <option value="HIGH">HIGH</option>
+            <option value="MED">MED</option>
+            <option value="LOW">LOW</option>
+          </select>
+        </div>
+
+        <div class="field fieldWide">
+          <label>Search Username</label>
+          <input id="searchUser" placeholder="type username..." />
+        </div>
+
+        <div class="field">
+          <label>Page Size</label>
+          <select id="pageSize">
+            <option value="100">100</option>
+            <option value="300" selected>300</option>
+            <option value="500">500</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Auto Load</label>
+          <select id="autoLoad">
+            <option value="ON" selected>ON</option>
+            <option value="OFF">OFF</option>
+          </select>
+        </div>
       </div>
-    </div>
 
-    <div class="small" style="margin-top:10px;">
-      Tip: This dashboard loads data in pages (300 rows per page) to avoid timeout.
-    </div>
+      <div class="meta">
+        <div class="hint">✅ Sticky header + sticky Username | Loads from API in pages (fast) | Scroll down to auto-load more.</div>
+        <div class="stats">
+          <div class="chip"><span class="k">Loaded:</span> <span id="loadedCnt">0</span></div>
+          <div class="chip"><span class="k">Total Matches:</span> <span id="totalCnt">0</span></div>
+          <div class="chip"><span class="k">Showing:</span> <span id="showingCnt">0</span></div>
+          <div class="chip"><span class="k">Offset:</span> <span id="offsetCnt">0</span></div>
+        </div>
+      </div>
 
-    <div class="tableWrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Username</th>
-            <th>Last Activity</th>
-            <th>Risk Score</th>
-            <th>Risk Level</th>
-            <th>Reasons</th>
-            <th>Total Deposit</th>
-            <th>Total Withdrawal</th>
-            <th>Net</th>
-            <th>Deposit Cnt</th>
-            <th>Withdraw Cnt</th>
-            <th>Unique Banks</th>
-            <th>Shared Bank Users</th>
-            <th>Shared IP Users</th>
-            <th>Fast Withdraw?</th>
-            <th>Account Status</th>
-            <th>VIP</th>
-          </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
+      <div class="tableWrap" id="tableWrap">
+        <table id="table">
+          <thead>
+            <tr id="theadRow"></tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+
+        <div id="emptyState" class="empty" style="display:none;">
+          <div class="emptyTitle">No results found</div>
+          <div class="emptySub">
+            Try lowering <b>Min Risk Score</b> or change <b>Risk Level</b> to ALL.
+          </div>
+        </div>
+      </div>
+
+      <div class="footerBar">
+        <button id="loadMoreBtn" class="btn btnPrimary">Load More</button>
+        <div class="smallMuted">Tip: For faster view, keep “ATTN (MED/HIGH)” and Min Score 3–4.</div>
+      </div>
     </div>
   </div>
 
-  <script>
-    // ✅ YOUR API URL
-    const API_BASE = "https://script.google.com/macros/s/AKfycbwxfjB-XCs5wq1Non1eB3KNEq5gN-mGJTZzGPC-vpzYCgMLWx1JDIkVH3Gjrs-VQ6lWGA/exec";
+  <!-- Columns Modal -->
+  <div id="modal" class="modal" style="display:none;">
+    <div class="modalCard">
+      <div class="modalTop">
+        <div class="modalTitle">Columns</div>
+        <button id="closeModal" class="btn">Close</button>
+      </div>
+      <div id="colList" class="colList"></div>
+      <div class="modalBottom">
+        <button id="showAllCols" class="btn">Show All</button>
+        <button id="hideSomeCols" class="btn">Compact View</button>
+      </div>
+    </div>
+  </div>
 
-    const $ = (id) => document.getElementById(id);
-
-    let allRows = [];
-    let offset = 0;
-    const LIMIT = 300;
-
-    function setStatus(msg, isError=false){
-      const el = $("statusText");
-      if (!el) return;
-      el.style.color = isError ? "#b42318" : "#027a48";
-      el.textContent = msg || "";
-    }
-
-    function escapeHtml(s) {
-      return String(s ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
-
-    function buildUrl(params){
-      const u = new URL(API_BASE);
-      Object.entries(params).forEach(([k,v]) => {
-        if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
-      });
-      return u.toString();
-    }
-
-    async function fetchJson(url){
-      const res = await fetch(url, { method:"GET", cache:"no-store" });
-      if(!res.ok) throw new Error("HTTP " + res.status);
-      return await res.json();
-    }
-
-    function pill(level){
-      const lv = (level || "").toUpperCase();
-      const cls = lv === "HIGH" ? "high" : (lv === "MED" ? "med" : "low");
-      return `<span class="pill ${cls}">${escapeHtml(lv || "LOW")}</span>`;
-    }
-
-    function applyClientFilters(rows){
-      const minScore = parseInt($("minScore").value || "0", 10);
-      const riskLevel = ($("riskLevel").value || "ALL").toUpperCase();
-      const q = ($("searchUser").value || "").trim().toLowerCase();
-
-      return rows.filter(r => {
-        const rs = Number(r.riskScore || 0);
-        if (rs < minScore) return false;
-
-        if (riskLevel !== "ALL" && (String(r.riskLevel || "").toUpperCase() !== riskLevel)) return false;
-
-        if (q && !String(r.username || "").toLowerCase().includes(q)) return false;
-
-        return true;
-      });
-    }
-
-    function renderTable(){
-      const tbody = $("tableBody");
-      if(!tbody) return;
-      const rows = applyClientFilters(allRows);
-
-      tbody.innerHTML = "";
-      rows.forEach(r => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${escapeHtml(r.username)}</td>
-          <td>${escapeHtml(r.lastActivityAt || "")}</td>
-          <td><b>${escapeHtml(r.riskScore)}</b></td>
-          <td>${pill(r.riskLevel)}</td>
-          <td class="muted">${escapeHtml(r.reasons || "")}</td>
-          <td>${escapeHtml(r.totalDeposit)}</td>
-          <td>${escapeHtml(r.totalWithdrawal)}</td>
-          <td>${escapeHtml(r.net)}</td>
-          <td>${escapeHtml(r.depositCnt)}</td>
-          <td>${escapeHtml(r.withdrawCnt)}</td>
-          <td>${escapeHtml(r.uniqueBanks)}</td>
-          <td>${escapeHtml(r.sharedBankUsers)}</td>
-          <td>${escapeHtml(r.sharedIpUsers)}</td>
-          <td>${escapeHtml(r.fastWithdraw)}</td>
-          <td>${escapeHtml(r.accountStatus)}</td>
-          <td>${escapeHtml(r.vip)}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-
-      setStatus(`Loaded ${allRows.length} rows (showing ${rows.length})`, false);
-    }
-
-    async function loadAllPages(){
-      offset = 0;
-      allRows = [];
-      renderTable();
-
-      const minScore = parseInt($("minScore").value || "3", 10);
-
-      setStatus("Loading...", false);
-
-      while(true){
-        const url = buildUrl({
-          format: "json",
-          minScore,
-          days: 3,        // ✅ fixed days = 3 (change later if needed)
-          limit: LIMIT,
-          offset
-        });
-
-        const data = await fetchJson(url);
-
-        if(!data || data.ok !== true){
-          throw new Error(data?.error || "API error");
-        }
-
-        const rows = Array.isArray(data.rows) ? data.rows : [];
-        allRows = allRows.concat(rows);
-        offset += rows.length;
-
-        renderTable();
-
-        if(!data.has_more) break;
-      }
-
-      setStatus(`DONE ✅ Total ${allRows.length} rows`, false);
-    }
-
-    function exportCSV(){
-      const rows = applyClientFilters(allRows);
-
-      const headers = [
-        "username","lastActivityAt",
-        "riskScore","riskLevel","reasons","totalDeposit","totalWithdrawal","net",
-        "depositCnt","withdrawCnt","uniqueBanks","sharedBankUsers","sharedIpUsers",
-        "fastWithdraw","accountStatus","vip"
-      ];
-
-      const lines = [];
-      lines.push(headers.join(","));
-
-      rows.forEach(r=>{
-        const line = headers.map(h=>{
-          const v = String(r[h] ?? "");
-          return `"${v.replaceAll('"','""')}"`;
-        }).join(",");
-        lines.push(line);
-      });
-
-      const blob = new Blob([lines.join("\n")], {type:"text/csv;charset=utf-8"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "bdt_fraud_radar.csv";
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    // ✅ events
-    window.addEventListener("DOMContentLoaded", () => {
-      $("reloadBtn").addEventListener("click", () => {
-        loadAllPages().catch(err => setStatus("Error: " + err.message, true));
-      });
-
-      $("exportBtn").addEventListener("click", exportCSV);
-
-      $("minScore").addEventListener("input", renderTable);
-      $("riskLevel").addEventListener("change", renderTable);
-      $("searchUser").addEventListener("input", renderTable);
-
-      // auto load on open
-      loadAllPages().catch(err => setStatus("Error: " + err.message, true));
-    });
-  </script>
+  <script src="./app.js"></script>
 </body>
 </html>

@@ -1,348 +1,425 @@
-// ====== CONFIG ======
-const API_URL = "https://script.google.com/macros/s/AKfycbwZFy95gkOZ1ZfGgdGrD_1Vbsg3GFeZcuFNu31SnMx9pOW9J1z-Xi4KToz0n71eck2FzA/exec";
+// ===================== CONFIG =====================
+// ✅ Use your latest working API (the one that returns total_matches ~2800+)
+const API_BASE = "https://script.google.com/macros/s/AKfycbwxfjB-XCs5wq1Non1eB3KNEq5gN-mGJTZzGPC-vpzYCgMLWx1JDIkVH3Gjrs-VQ6lWGA/exec";
 
-// Risk rules (you can tune later)
-const RULES = {
-  MIN_SCORE_DEFAULT: 3,
-  SHARED_BANK_MIN_USERS: 2,
-  SHARED_IP_MIN_USERS: 3,
-  FAST_WITHDRAW_HOURS: 6,
-  NET_PROFIT_MIN: 5000,
-};
+// Columns definition (key -> label)
+const COLS = [
+  ["username","Username"],
+  ["lastActivityAt","Last Activity"],
+  ["riskScore","Risk Score"],
+  ["riskLevel","Risk Level"],
+  ["reasons","Reasons"],
+  ["totalDeposit","Total Deposit"],
+  ["totalWithdrawal","Total Withdrawal"],
+  ["net","Net"],
+  ["depositCnt","Deposit Cnt"],
+  ["withdrawCnt","Withdraw Cnt"],
+  ["uniqueBanks","Unique Banks"],
+  ["sharedBankUsers","Shared Bank Users"],
+  ["sharedIpUsers","Shared IP Users"],
+  ["fastWithdraw","Fast Withdraw?"],
+  ["accountStatus","Account Status"],
+  ["vip","VIP"],
+];
 
-// ====== UI ======
-const elStatus = document.getElementById("status");
-const tbody = document.getElementById("tbody");
-const minScoreEl = document.getElementById("minScore");
-const riskLevelEl = document.getElementById("riskLevel");
-const searchUserEl = document.getElementById("searchUser");
+// Default visible columns (more compact, fits screen better)
+const DEFAULT_VISIBLE = new Set([
+  "username","lastActivityAt","riskScore","riskLevel","reasons",
+  "totalDeposit","totalWithdrawal","net","depositCnt","withdrawCnt",
+  "sharedBankUsers","sharedIpUsers","fastWithdraw"
+]);
 
-document.getElementById("reloadBtn").addEventListener("click", load);
-document.getElementById("exportBtn").addEventListener("click", exportCSV);
+// ===================== HELPERS =====================
+const $ = (id) => document.getElementById(id);
 
-minScoreEl.value = RULES.MIN_SCORE_DEFAULT;
-[minScoreEl, riskLevelEl, searchUserEl].forEach(el => el.addEventListener("input", render));
-
-// ====== JSONP Loader (bypass CORS) ======
-function jsonp(url) {
-  return new Promise((resolve, reject) => {
-    const cbName = "cb_" + Math.random().toString(36).slice(2);
-    const script = document.createElement("script");
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error("JSONP timeout"));
-    }, 20000);
-
-    function cleanup() {
-      clearTimeout(timeout);
-      delete window[cbName];
-      script.remove();
-    }
-
-    window[cbName] = (data) => {
-      cleanup();
-      resolve(data);
-    };
-
-    script.src = url + (url.includes("?") ? "&" : "?") + "callback=" + cbName;
-    script.onerror = () => { cleanup(); reject(new Error("JSONP load failed")); };
-    document.body.appendChild(script);
-  });
-}
-
-// ====== DATA ======
-let fullRows = []; // computed fraud rows
-
-function num(x) {
-  const n = parseFloat(String(x || "").replace(/,/g, ""));
-  return isNaN(n) ? 0 : n;
-}
-
-function parseTime(s) {
-  // your sheet times look like "1/16/2026 13:14" or "2026/01/16 13:14:00"
-  const t = new Date(s);
-  return isNaN(t.getTime()) ? null : t;
-}
-
-function hoursBetween(a, b) {
-  if (!a || !b) return null;
-  return Math.abs(b.getTime() - a.getTime()) / 36e5;
-}
-
-// ====== MAIN ======
-async function load() {
-  elStatus.textContent = "Loading data from API...";
-  tbody.innerHTML = "";
-
-  try {
-    const data = await jsonp(API_URL);
-    if (!data || !data.ok) throw new Error(data?.error || "API returned error");
-
-    const deposit = data.deposit?.rows || [];
-    const withdraw = data.withdraw?.rows || [];
-    const member = data.member?.rows || [];
-
-    fullRows = buildFraudRows({ deposit, withdraw, member });
-    elStatus.textContent = `Loaded. Candidates: ${fullRows.length}`;
-    render();
-
-  } catch (e) {
-    console.error(e);
-    elStatus.textContent = "Error: " + e.message;
-  }
-}
-
-function buildFraudRows({ deposit, withdraw, member }) {
-  // ---- Build per-user aggregates ----
-  const u = {}; // username -> stats
-
-  function ensure(user) {
-    const key = String(user || "").trim();
-    if (!key) return null;
-    if (!u[key]) {
-      u[key] = {
-        username: key,
-        depTotal: 0, depCnt: 0, depFirst: null,
-        wdTotal: 0, wdCnt: 0, wdFirst: null,
-        banks: new Set(),
-        ip: "",
-        vip: "",
-        accountStatus: "",
-      };
-    }
-    return u[key];
-  }
-
-  // Deposit fields (based on your RAW headers)
-  for (const r of deposit) {
-    const user = ensure(r["Username"]);
-    if (!user) continue;
-    user.depTotal += num(r["Deposit Amount"] || r["Deposit amount"]);
-    user.depCnt += 1;
-    const t = parseTime(r["Created Time"]);
-    if (t && (!user.depFirst || t < user.depFirst)) user.depFirst = t;
-
-    const bank = String(r["From Bank Acc No"] || r["From Wallet/Account No"] || "").trim();
-    if (bank) user.banks.add(bank);
-  }
-
-  // Withdrawal fields (based on your RAW headers)
-  for (const r of withdraw) {
-    const user = ensure(r["Username"]);
-    if (!user) continue;
-    user.wdTotal += num(r["Withdrawal Amount"] || r["Amount"]);
-    user.wdCnt += 1;
-    const t = parseTime(r["Created Time"]);
-    if (t && (!user.wdFirst || t < user.wdFirst)) user.wdFirst = t;
-
-    const bank = String(r["Bank Acc No"] || r["Bank Account / Wallet"] || "").trim();
-    if (bank) user.banks.add(bank);
-  }
-
-  // Member fields (based on your RAW headers)
-  for (const r of member) {
-    const user = ensure(r["Username"]);
-    if (!user) continue;
-    user.ip = String(r["Last Login IP"] || "").trim();
-    user.vip = String(r["VIP"] || "").trim();
-    user.accountStatus = String(r["Account Status"] || r["Status"] || "").trim();
-  }
-
-  // ---- Shared Bank Map ----
-  const bankToUsers = new Map(); // bank -> Set(users)
-  for (const k of Object.keys(u)) {
-    for (const b of u[k].banks) {
-      if (!bankToUsers.has(b)) bankToUsers.set(b, new Set());
-      bankToUsers.get(b).add(k);
-    }
-  }
-
-  // ---- Shared IP Map ----
-  const ipToUsers = new Map(); // ip -> Set(users)
-  for (const k of Object.keys(u)) {
-    const ip = u[k].ip;
-    if (!ip) continue;
-    if (!ipToUsers.has(ip)) ipToUsers.set(ip, new Set());
-    ipToUsers.get(ip).add(k);
-  }
-
-  // ---- Compute Risk Rows ----
-  const out = [];
-  for (const k of Object.keys(u)) {
-    const s = u[k];
-
-    // shared bank users = max shared users count across any bank
-    let sharedBankUsers = 0;
-    for (const b of s.banks) {
-      sharedBankUsers = Math.max(sharedBankUsers, (bankToUsers.get(b)?.size || 0));
-    }
-
-    const sharedIPUsers = s.ip ? (ipToUsers.get(s.ip)?.size || 0) : 0;
-
-    const net = s.depTotal - s.wdTotal;
-    const fastHrs = (s.depFirst && s.wdFirst) ? hoursBetween(s.depFirst, s.wdFirst) : null;
-    const fastWithdraw = fastHrs !== null && fastHrs <= RULES.FAST_WITHDRAW_HOURS;
-
-    // ---- scoring (simple + effective) ----
-    let score = 0;
-    const reasons = [];
-
-    if (sharedBankUsers >= RULES.SHARED_BANK_MIN_USERS && sharedBankUsers > 1) {
-      score += 3;
-      reasons.push(`Shared bank account with ${sharedBankUsers - 1} other user(s)`);
-    }
-
-    if (sharedIPUsers >= RULES.SHARED_IP_MIN_USERS && sharedIPUsers > 1) {
-      score += 2;
-      reasons.push(`Shared login IP with ${sharedIPUsers - 1} other user(s)`);
-    }
-
-    if (fastWithdraw) {
-      score += 2;
-      reasons.push(`Fast withdraw (${fastHrs.toFixed(1)}h) after first deposit`);
-    }
-
-    if (net <= -RULES.NET_PROFIT_MIN) {
-      // withdrew much more than deposited
-      score += 3;
-      reasons.push(`Net negative beyond threshold (${net.toFixed(2)})`);
-    }
-
-    if (s.wdCnt >= 3 && s.depCnt <= 1) {
-      score += 2;
-      reasons.push(`Many withdrawals with low deposit count (wd ${s.wdCnt} vs dep ${s.depCnt})`);
-    }
-
-    // Decide risk level
-    let level = "LOW";
-    if (score >= 6) level = "HIGH";
-    else if (score >= 3) level = "MEDIUM";
-
-    // ✅ Only keep “possible fraud”
-    if (score >= RULES.MIN_SCORE_DEFAULT) {
-      out.push({
-        username: s.username,
-        score,
-        level,
-        reasons: reasons.join(" | "),
-        depTotal: s.depTotal,
-        wdTotal: s.wdTotal,
-        net,
-        depCnt: s.depCnt,
-        wdCnt: s.wdCnt,
-        uniqueBanks: s.banks.size,
-        sharedBankUsers,
-        sharedIPUsers,
-        fastWithdraw: fastWithdraw ? "YES" : "NO",
-        accountStatus: s.accountStatus,
-        vip: s.vip,
-      });
-    }
-  }
-
-  // Sort highest risk first
-  out.sort((a, b) => b.score - a.score || b.net - a.net);
-  return out;
-}
-
-function render() {
-  const minScore = num(minScoreEl.value) || RULES.MIN_SCORE_DEFAULT;
-  const riskLevel = riskLevelEl.value;
-  const q = String(searchUserEl.value || "").trim().toLowerCase();
-
-  const rows = fullRows.filter(r => {
-    if (r.score < minScore) return false;
-    if (riskLevel !== "ALL" && r.level !== riskLevel) return false;
-    if (q && !r.username.toLowerCase().includes(q)) return false;
-    return true;
-  });
-
-  tbody.innerHTML = rows.map(r => {
-    return `
-      <tr>
-        <td><b>${escapeHtml(r.username)}</b></td>
-        <td>${r.score}</td>
-        <td><span class="badge ${r.level}">${r.level}</span></td>
-        <td class="small">${escapeHtml(r.reasons || "-")}</td>
-        <td>${fmt(r.depTotal)}</td>
-        <td>${fmt(r.wdTotal)}</td>
-        <td>${fmt(r.net)}</td>
-        <td>${r.depCnt}</td>
-        <td>${r.wdCnt}</td>
-        <td>${r.uniqueBanks}</td>
-        <td>${r.sharedBankUsers}</td>
-        <td>${r.sharedIPUsers}</td>
-        <td>${r.fastWithdraw}</td>
-        <td>${escapeHtml(r.accountStatus || "")}</td>
-        <td>${escapeHtml(r.vip || "")}</td>
-      </tr>
-    `;
-  }).join("");
-
-  elStatus.textContent = `Showing ${rows.length} / ${fullRows.length} candidates`;
-}
-
-function exportCSV() {
-  const minScore = num(minScoreEl.value) || RULES.MIN_SCORE_DEFAULT;
-  const riskLevel = riskLevelEl.value;
-  const q = String(searchUserEl.value || "").trim().toLowerCase();
-
-  const rows = fullRows.filter(r => {
-    if (r.score < minScore) return false;
-    if (riskLevel !== "ALL" && r.level !== riskLevel) return false;
-    if (q && !r.username.toLowerCase().includes(q)) return false;
-    return true;
-  });
-
-  const headers = [
-    "Username","Risk Score","Risk Level","Reasons",
-    "Total Deposit","Total Withdrawal","Net",
-    "Deposit Count","Withdrawal Count",
-    "Unique Banks","Shared Bank Users","Shared IP Users",
-    "Fast Withdraw","Account Status","VIP"
-  ];
-
-  const lines = [headers.join(",")];
-  for (const r of rows) {
-    const line = [
-      r.username, r.score, r.level, r.reasons,
-      r.depTotal, r.wdTotal, r.net,
-      r.depCnt, r.wdCnt,
-      r.uniqueBanks, r.sharedBankUsers, r.sharedIPUsers,
-      r.fastWithdraw, r.accountStatus, r.vip
-    ].map(csvSafe).join(",");
-    lines.push(line);
-  }
-
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "bdt_fraud_candidates.csv";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-function csvSafe(v) {
-  const s = String(v ?? "");
-  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
-function escapeHtml(s) {
+function esc(s){
   return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
 }
-function fmt(n) {
+
+function toNum(x){
+  const n = parseFloat(String(x ?? "").replace(/,/g,"").trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+function setStatus(msg, isErr=false){
+  const el = $("status");
+  el.style.color = isErr ? "#ef4444" : "#16a34a";
+  el.textContent = msg;
+}
+
+function buildUrl(params){
+  const u = new URL(API_BASE);
+  // always request pure JSON
+  u.searchParams.set("format","json");
+  Object.entries(params).forEach(([k,v])=>{
+    if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
+  });
+  return u.toString();
+}
+
+// Try fetch JSON; if blocked by CORS, fallback to JSONP
+async function fetchJsonSmart(url){
+  try {
+    const res = await fetch(url, { method:"GET", cache:"no-store" });
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    return await res.json();
+  } catch (_) {
+    // JSONP fallback
+    return await jsonp(url);
+  }
+}
+
+function jsonp(url){
+  return new Promise((resolve,reject)=>{
+    const cbName = "cb_" + Math.random().toString(36).slice(2);
+    const s = document.createElement("script");
+    const t = setTimeout(()=>{ cleanup(); reject(new Error("JSONP timeout")); }, 20000);
+
+    function cleanup(){
+      clearTimeout(t);
+      delete window[cbName];
+      s.remove();
+    }
+
+    window[cbName] = (data)=>{ cleanup(); resolve(data); };
+    s.onerror = ()=>{ cleanup(); reject(new Error("JSONP failed")); };
+
+    const join = url.includes("?") ? "&" : "?";
+    s.src = url + join + "callback=" + cbName;
+    document.body.appendChild(s);
+  });
+}
+
+// ===================== STATE =====================
+let allRows = [];
+let totalMatches = 0;
+let offset = 0;
+let isLoading = false;
+
+let visibleCols = loadCols();
+
+// ===================== COLUMNS =====================
+function loadCols(){
+  try{
+    const raw = localStorage.getItem("bdtFraudCols");
+    if(!raw) return new Set(DEFAULT_VISIBLE);
+    const arr = JSON.parse(raw);
+    return new Set(arr);
+  }catch{
+    return new Set(DEFAULT_VISIBLE);
+  }
+}
+function saveCols(){
+  localStorage.setItem("bdtFraudCols", JSON.stringify([...visibleCols]));
+}
+
+function renderThead(){
+  const tr = $("theadRow");
+  tr.innerHTML = "";
+  for(const [key,label] of COLS){
+    if(!visibleCols.has(key)) continue;
+    const th = document.createElement("th");
+    th.textContent = label;
+    if(key === "username") th.className = "stickyUser";
+    tr.appendChild(th);
+  }
+}
+
+function openColumnsModal(){
+  const modal = $("modal");
+  const list = $("colList");
+  list.innerHTML = "";
+
+  for(const [key,label] of COLS){
+    const item = document.createElement("div");
+    item.className = "colItem";
+    item.innerHTML = `
+      <input type="checkbox" ${visibleCols.has(key) ? "checked":""} data-col="${esc(key)}" />
+      <div><b>${esc(label)}</b><div style="font-size:12px;color:#64748b">${esc(key)}</div></div>
+    `;
+    list.appendChild(item);
+  }
+
+  list.querySelectorAll("input[type=checkbox]").forEach(chk=>{
+    chk.addEventListener("change", ()=>{
+      const k = chk.getAttribute("data-col");
+      if(chk.checked) visibleCols.add(k);
+      else visibleCols.delete(k);
+      saveCols();
+      renderThead();
+      renderBody();
+    });
+  });
+
+  modal.style.display = "grid";
+}
+
+// ===================== FILTERS =====================
+function getFilters(){
+  const days = parseInt(($("days").value || "3").trim(), 10);
+  const minScore = parseInt(($("minScore").value || "3").trim(), 10);
+
+  // If blank/NaN (your current issue), force defaults
+  const safeDays = Number.isFinite(days) && days > 0 ? days : 3;
+  const safeMin = Number.isFinite(minScore) && minScore >= 0 ? minScore : 3;
+
+  const riskLevel = ($("riskLevel").value || "ATTN").toUpperCase();
+  const q = ($("searchUser").value || "").trim().toLowerCase();
+
+  const limit = parseInt(($("pageSize").value || "300").trim(), 10) || 300;
+
+  return { days: safeDays, minScore: safeMin, riskLevel, q, limit };
+}
+
+function applyClientFilters(rows){
+  const { riskLevel, q, minScore } = getFilters();
+
+  return rows.filter(r=>{
+    const rs = toNum(r.riskScore);
+    if(rs < minScore) return false;
+
+    // ATTENTION mode = MED/HIGH only
+    const lvl = String(r.riskLevel || "").toUpperCase();
+    if(riskLevel === "ATTN" && !(lvl === "MED" || lvl === "HIGH")) return false;
+    if(riskLevel !== "ALL" && riskLevel !== "ATTN" && lvl !== riskLevel) return false;
+
+    if(q && !String(r.username||"").toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+// ===================== RENDER =====================
+function renderCounters(){
+  $("loadedCnt").textContent = String(allRows.length);
+  $("totalCnt").textContent = String(totalMatches || 0);
+  $("offsetCnt").textContent = String(offset);
+  const shown = applyClientFilters(allRows).length;
+  $("showingCnt").textContent = String(shown);
+
+  // empty state
+  $("emptyState").style.display = shown === 0 && allRows.length > 0 ? "grid" : "none";
+  if(allRows.length === 0) $("emptyState").style.display = "none";
+}
+
+function pill(level){
+  const lv = String(level||"LOW").toUpperCase();
+  const c = (lv === "HIGH") ? "HIGH" : (lv === "MED" ? "MED" : "LOW");
+  return `<span class="pill ${c}">${esc(lv)}</span>`;
+}
+
+function fmt(n){
   const x = Number(n || 0);
   return x.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
-// auto load
-load();
+function renderBody(){
+  const tbody = $("tbody");
+  const rows = applyClientFilters(allRows);
+
+  tbody.innerHTML = rows.map(r=>{
+    const tds = [];
+
+    for(const [key] of COLS){
+      if(!visibleCols.has(key)) continue;
+
+      let val = r[key];
+
+      if(key === "username"){
+        tds.push(`<td class="stickyUser">${esc(val || "")}</td>`);
+        continue;
+      }
+      if(key === "riskLevel"){
+        tds.push(`<td>${pill(val)}</td>`);
+        continue;
+      }
+      if(key === "reasons"){
+        tds.push(`<td class="muted">${esc(val || "")}</td>`);
+        continue;
+      }
+      if(key === "net"){
+        const nn = toNum(val);
+        tds.push(`<td class="${nn < 0 ? "neg" : "pos"}">${esc(fmt(nn))}</td>`);
+        continue;
+      }
+      if(["totalDeposit","totalWithdrawal"].includes(key)){
+        tds.push(`<td>${esc(fmt(toNum(val)))}</td>`);
+        continue;
+      }
+
+      // date fields already formatted by API "YYYY-MM-DD HH:mm:ss"
+      tds.push(`<td>${esc(val ?? "")}</td>`);
+    }
+
+    return `<tr>${tds.join("")}</tr>`;
+  }).join("");
+
+  renderCounters();
+}
+
+// ===================== LOADING =====================
+async function loadFirstPage(){
+  if(isLoading) return;
+  isLoading = true;
+
+  // reset
+  allRows = [];
+  totalMatches = 0;
+  offset = 0;
+  renderBody();
+  renderCounters();
+
+  const { days, minScore, limit } = getFilters();
+
+  setStatus("Loading…", false);
+  try{
+    const url = buildUrl({ days, minScore, limit, offset });
+    const data = await fetchJsonSmart(url);
+
+    if(!data || data.ok !== true) throw new Error(data?.error || "API error");
+
+    totalMatches = Number(data.total_matches || 0);
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    allRows = rows;
+    offset = rows.length;
+
+    setStatus(`Loaded ${allRows.length} of ${totalMatches}`, false);
+    renderBody();
+
+    // show empty state if nothing matches from API
+    if(allRows.length === 0){
+      $("emptyState").style.display = "grid";
+      $("emptyState").querySelector(".emptyTitle").textContent = "No results returned from API";
+      $("emptyState").querySelector(".emptySub").innerHTML =
+        `Try lowering <b>Min Risk Score</b> or increasing <b>Days</b>.`;
+    }
+  }catch(e){
+    console.error(e);
+    setStatus("Error: " + e.message, true);
+  }finally{
+    isLoading = false;
+  }
+}
+
+async function loadMore(){
+  if(isLoading) return;
+  const { days, minScore, limit } = getFilters();
+
+  // no more
+  if(offset >= totalMatches && totalMatches > 0) return;
+
+  isLoading = true;
+  setStatus(`Loading more… (${offset}/${totalMatches || "?"})`, false);
+
+  try{
+    const url = buildUrl({ days, minScore, limit, offset });
+    const data = await fetchJsonSmart(url);
+    if(!data || data.ok !== true) throw new Error(data?.error || "API error");
+
+    totalMatches = Number(data.total_matches || totalMatches || 0);
+
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    allRows = allRows.concat(rows);
+    offset += rows.length;
+
+    setStatus(`Loaded ${allRows.length} of ${totalMatches}`, false);
+    renderBody();
+  }catch(e){
+    console.error(e);
+    setStatus("Error: " + e.message, true);
+  }finally{
+    isLoading = false;
+  }
+}
+
+// Auto-load on scroll
+function hookScrollAutoLoad(){
+  const wrap = $("tableWrap");
+  wrap.addEventListener("scroll", ()=>{
+    const mode = $("autoLoad").value || "ON";
+    if(mode !== "ON") return;
+    if(isLoading) return;
+    const nearBottom = (wrap.scrollTop + wrap.clientHeight) >= (wrap.scrollHeight - 180);
+    if(nearBottom) loadMore();
+  });
+}
+
+// Export only currently visible filtered rows
+function exportCSV(){
+  const rows = applyClientFilters(allRows);
+  const headers = COLS.filter(([k])=>visibleCols.has(k)).map(([,label])=>label);
+
+  const keys = COLS.filter(([k])=>visibleCols.has(k)).map(([k])=>k);
+
+  const lines = [];
+  lines.push(headers.map(csvSafe).join(","));
+  rows.forEach(r=>{
+    const line = keys.map(k=>csvSafe(String(r[k] ?? ""))).join(",");
+    lines.push(line);
+  });
+
+  const blob = new Blob([lines.join("\n")], {type:"text/csv;charset=utf-8"});
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = u;
+  a.download = "bdt_fraud_radar_attention.csv";
+  a.click();
+  URL.revokeObjectURL(u);
+}
+function csvSafe(s){
+  const v = String(s ?? "");
+  if(v.includes(",") || v.includes('"') || v.includes("\n")) return `"${v.replaceAll('"','""')}"`;
+  return v;
+}
+
+// ===================== INIT =====================
+window.addEventListener("DOMContentLoaded", ()=>{
+  // fix your “0 rows” issue: force defaults even if inputs empty
+  if(!$("days").value) $("days").value = "3";
+  if(!$("minScore").value) $("minScore").value = "3";
+  if(!$("riskLevel").value) $("riskLevel").value = "ATTN";
+
+  renderThead();
+  renderBody();
+  renderCounters();
+
+  $("reloadBtn").addEventListener("click", loadFirstPage);
+  $("loadMoreBtn").addEventListener("click", loadMore);
+  $("exportBtn").addEventListener("click", exportCSV);
+
+  $("columnsBtn").addEventListener("click", openColumnsModal);
+  $("closeModal").addEventListener("click", ()=> $("modal").style.display = "none");
+  $("modal").addEventListener("click", (e)=>{ if(e.target.id === "modal") $("modal").style.display = "none"; });
+
+  $("showAllCols").addEventListener("click", ()=>{
+    visibleCols = new Set(COLS.map(([k])=>k));
+    saveCols();
+    renderThead();
+    renderBody();
+  });
+
+  $("hideSomeCols").addEventListener("click", ()=>{
+    visibleCols = new Set(DEFAULT_VISIBLE);
+    saveCols();
+    renderThead();
+    renderBody();
+  });
+
+  // re-render on filter changes (client-side)
+  ["days","minScore","riskLevel","searchUser","pageSize","autoLoad"].forEach(id=>{
+    $(id).addEventListener("input", ()=>{
+      // If days/minScore changed, reload from API first page
+      if(id === "days" || id === "minScore") loadFirstPage();
+      else renderBody();
+    });
+  });
+
+  hookScrollAutoLoad();
+
+  // first load
+  loadFirstPage();
+});

@@ -7,269 +7,131 @@
 
   <style>
     :root { color-scheme: light; }
-    * { box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; margin: 0; background: #f6f7fb; color:#111; }
-
-    .wrap { max-width: 1400px; margin: 18px auto; padding: 0 14px; }
-    .card { background:#fff; border:1px solid #e6e7ee; border-radius: 14px; box-shadow: 0 4px 18px rgba(0,0,0,.04); }
-
-    .topbar {
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
-      padding: 14px 14px;
-      border-bottom:1px solid #eef0f6;
-    }
-    .title {
-      display:flex; align-items:center; gap:10px; margin:0;
-      font-size: 22px; font-weight: 800;
-    }
-    .badge { font-size: 12px; padding: 4px 8px; border:1px solid #d9dbe6; border-radius:999px; color:#333; background:#fafbff; }
-    .right {
-      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-      justify-content:flex-end;
-    }
-    .status { font-weight:700; color:#027a48; }
-    .status.err { color:#b42318; }
-
+    body { font-family: Arial, sans-serif; margin: 0; background: #fff; color:#111; }
+    .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    h1 { font-size: 28px; margin: 0; display:flex; align-items:center; gap:10px; }
+    .badge { font-size: 12px; padding: 4px 8px; border:1px solid #ddd; border-radius:999px; color:#333; }
+    .actions { display:flex; align-items:center; gap:10px; }
     button {
-      border:1px solid #d1d5db; background:#fff; padding:10px 12px;
-      border-radius:10px; cursor:pointer; font-weight:700;
+      border:1px solid #ccc; background:#fff; padding:10px 14px;
+      border-radius:10px; cursor:pointer;
     }
-    button:hover { background:#f4f5f8; }
-
-    .controls {
-      padding: 12px 14px;
-      display:grid;
-      grid-template-columns: 160px 160px 180px 1fr 160px 160px;
-      gap:12px;
-      align-items:end;
-    }
-    @media (max-width: 1100px){
-      .controls { grid-template-columns: 1fr 1fr; }
-      .right { justify-content:flex-start; }
-    }
-    label { font-size: 12px; color:#4b5563; display:block; margin-bottom:6px; font-weight:700; }
+    button:hover { background:#f6f6f6; }
+    .status { color:#b42318; font-weight:600; margin-right:10px; }
+    .filters { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 16px; }
+    label { font-size: 12px; color:#444; display:block; margin-bottom:6px; }
     input, select {
       width: 100%;
       padding: 10px 12px;
-      border:1px solid #d1d5db;
+      border:1px solid #ccc;
       border-radius: 10px;
       outline:none;
       font-size:14px;
-      background:#fff;
     }
-
-    .hint { padding: 0 14px 10px 14px; font-size: 12px; color:#6b7280; }
-
-    /* Table container */
-    .tableWrap {
-      border-top:1px solid #eef0f6;
-      border-bottom-left-radius: 14px;
-      border-bottom-right-radius: 14px;
-      overflow: hidden;
-    }
-    .tableScroll {
-      height: 70vh;            /* ✅ big, scrollable */
-      overflow: auto;          /* ✅ both x & y scroll */
-    }
-
-    table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+    .tableWrap { margin-top: 16px; border:1px solid #ddd; border-radius: 12px; overflow:auto; }
+    table { width:100%; border-collapse: collapse; font-size: 13px; }
     thead th {
-      position: sticky; top: 0; z-index: 5;
-      background:#f8fafc;
+      background:#f7f7f7;
       text-align:left;
-      padding: 10px 10px;
-      border-bottom:1px solid #e5e7eb;
-      white-space:nowrap;
-      font-weight:800;
-    }
-
-    tbody td {
-      padding: 10px 10px;
-      border-bottom:1px solid #eef2f7;
-      vertical-align: top;
-      white-space: nowrap;
-      background:#fff;
-    }
-    tbody tr:hover td { background:#fbfdff; }
-
-    /* Sticky first column (Username) */
-    th.stickyLeft, td.stickyLeft{
-      position: sticky; left: 0; z-index: 6;
-      background: inherit;
-      border-right: 1px solid #eef2f7;
-      min-width: 140px;
-    }
-    thead th.stickyLeft { z-index: 7; background:#f8fafc; }
-
-    /* Pills */
-    .pill { display:inline-block; padding: 3px 8px; border-radius:999px; font-size: 12px; border:1px solid #ddd; font-weight:800; }
-    .pill.low { background:#ecfdf3; border-color:#a6f4c5; color:#067647; }
-    .pill.med { background:#fffaeb; border-color:#fedf89; color:#b54708; }
-    .pill.high { background:#fef3f2; border-color:#fda29b; color:#b42318; }
-
-    /* Reasons nicer */
-    .reasons {
-      white-space: normal;
-      min-width: 260px;
-      max-width: 360px;
-      color:#4b5563;
-      line-height: 1.25;
-    }
-
-    /* Compact mode */
-    .compact thead th { padding: 8px 8px; font-size: 12px; }
-    .compact tbody td { padding: 8px 8px; font-size: 12px; }
-    .compact .reasons { max-width: 280px; }
-
-    /* Column chooser */
-    .chooser {
-      position: relative;
-    }
-    .chooserPanel {
-      position:absolute;
-      right:0;
-      top: 44px;
-      width: 280px;
-      background:#fff;
-      border:1px solid #e6e7ee;
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.08);
       padding: 10px;
-      display:none;
-      z-index: 50;
-      max-height: 320px;
-      overflow:auto;
+      border-bottom:1px solid #ddd;
+      white-space:nowrap;
     }
-    .chooserPanel.open { display:block; }
-    .chkRow {
-      display:flex; align-items:center; gap:8px;
-      padding: 6px 6px;
-      border-radius: 10px;
+    tbody td { padding: 10px; border-bottom:1px solid #eee; vertical-align: top; }
+    tbody tr:hover { background:#fafafa; }
+    .pill {
+      display:inline-block; padding: 3px 8px; border-radius:999px; font-size: 12px;
+      border:1px solid #ddd;
     }
-    .chkRow:hover { background:#f6f7fb; }
-    .chkRow input { width: 16px; height: 16px; }
-    .smallmuted { font-size: 12px; color:#6b7280; }
-
-    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pill.low { background:#ecfdf3; border-color:#a6f4c5; }
+    .pill.med { background:#fffaeb; border-color:#fedf89; }
+    .pill.high { background:#fef3f2; border-color:#fda29b; }
+    .muted { color:#666; }
+    .small { font-size:12px; color:#666; }
   </style>
 </head>
 
 <body>
   <div class="wrap">
-    <div class="card">
-      <div class="topbar">
-        <div class="title">🚨 BDT Fraud Radar <span class="badge">Pro Table</span></div>
+    <div class="topbar">
+      <h1>🚨 BDT Fraud Radar <span class="badge">Fast (No JSONP)</span></h1>
 
-        <div class="right">
-          <div id="statusText" class="status">Idle</div>
-          <button id="reloadBtn">Reload</button>
-          <button id="exportBtn">Export CSV</button>
+      <div class="actions">
+        <span class="status" id="statusText"></span>
+        <button id="reloadBtn">Reload</button>
+        <button id="exportBtn">Export CSV</button>
+      </div>
+    </div>
 
-          <div class="chooser">
-            <button id="colsBtn">Columns</button>
-            <div id="colsPanel" class="chooserPanel"></div>
-          </div>
-        </div>
+    <div class="filters">
+      <div>
+        <label>Min Risk Score</label>
+        <input id="minScore" type="number" value="3" min="0" />
       </div>
 
-      <div class="controls">
-        <div>
-          <label>Days (Lookback)</label>
-          <input id="days" type="number" value="3" min="1" />
-        </div>
-
-        <div>
-          <label>Min Risk Score</label>
-          <input id="minScore" type="number" value="3" min="0" />
-        </div>
-
-        <div>
-          <label>Risk Level</label>
-          <select id="riskLevel">
-            <option value="ALL">ALL</option>
-            <option value="LOW">LOW</option>
-            <option value="MED">MED</option>
-            <option value="HIGH">HIGH</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Search Username</label>
-          <input id="searchUser" placeholder="type username..." />
-        </div>
-
-        <div>
-          <label>Max Rows Render</label>
-          <input id="maxRender" type="number" value="5000" min="100" />
-        </div>
-
-        <div>
-          <label>Compact Mode</label>
-          <select id="compactMode">
-            <option value="0">Normal</option>
-            <option value="1">Compact</option>
-          </select>
-        </div>
+      <div>
+        <label>Risk Level</label>
+        <select id="riskLevel">
+          <option value="ALL">ALL</option>
+          <option value="LOW">LOW</option>
+          <option value="MED">MED</option>
+          <option value="HIGH">HIGH</option>
+        </select>
       </div>
 
-      <div class="hint">
-        ✅ Sticky header + sticky Username | Use <b>Columns</b> to hide fields and fit screen | Loads from API in pages (300 rows/page).
+      <div>
+        <label>Search Username</label>
+        <input id="searchUser" placeholder="type username..." />
       </div>
+    </div>
 
-      <div class="tableWrap">
-        <div class="tableScroll" id="tableScroll">
-          <table id="tbl">
-            <thead>
-              <tr id="theadRow"></tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-          </table>
-        </div>
-      </div>
+    <div class="small" style="margin-top:10px;">
+      Tip: This dashboard loads data in pages (300 rows per page) to avoid timeout.
+    </div>
+
+    <div class="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Last Activity</th>
+            <th>Risk Score</th>
+            <th>Risk Level</th>
+            <th>Reasons</th>
+            <th>Total Deposit</th>
+            <th>Total Withdrawal</th>
+            <th>Net</th>
+            <th>Deposit Cnt</th>
+            <th>Withdraw Cnt</th>
+            <th>Unique Banks</th>
+            <th>Shared Bank Users</th>
+            <th>Shared IP Users</th>
+            <th>Fast Withdraw?</th>
+            <th>Account Status</th>
+            <th>VIP</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
     </div>
   </div>
 
   <script>
-    // ✅ API you tested (returns total_matches + has_more + rows)
-    const API_BASE = "https://script.google.com/macros/s/AKfycbwWw2IpROB8KdKcWGJtuBtUJg4JuRNiGJy09vEkFjllIOdrlU85SX7XLpL_Mahn-YDM8A/exec";
-    const LIMIT = 300;
+    // ✅ YOUR API URL
+    const API_BASE = "https://script.google.com/macros/s/AKfycbwxfjB-XCs5wq1Non1eB3KNEq5gN-mGJTZzGPC-vpzYCgMLWx1JDIkVH3Gjrs-VQ6lWGA/exec";
 
     const $ = (id) => document.getElementById(id);
 
     let allRows = [];
-    let totalMatches = null;
-    let isLoading = false;
-
-    // ✅ Column model (order + labels)
-    const COLUMNS = [
-      { key:"username", label:"Username", stickyLeft:true },
-      { key:"lastActivityAt", label:"Last Activity" },
-      { key:"riskScore", label:"Risk Score" },
-      { key:"riskLevel", label:"Risk Level" },
-      { key:"reasons", label:"Reasons", className:"reasons" },
-      { key:"totalDeposit", label:"Total Deposit", className:"num" },
-      { key:"totalWithdrawal", label:"Total Withdrawal", className:"num" },
-      { key:"net", label:"Net", className:"num" },
-      { key:"depositCnt", label:"Deposit Cnt", className:"num" },
-      { key:"withdrawCnt", label:"Withdraw Cnt", className:"num" },
-      { key:"uniqueBanks", label:"Unique Banks", className:"num" },
-      { key:"sharedBankUsers", label:"Shared Bank Users", className:"num" },
-      { key:"sharedIpUsers", label:"Shared IP Users", className:"num" },
-      { key:"fastWithdraw", label:"Fast Withdraw?" },
-      { key:"accountStatus", label:"Account Status" },
-      { key:"vip", label:"VIP" }
-    ];
-
-    // default visible columns (hide some if you want)
-    const DEFAULT_VISIBLE = new Set(COLUMNS.map(c => c.key));
-    // Example: DEFAULT_VISIBLE.delete("accountStatus"); DEFAULT_VISIBLE.delete("vip");
-
-    let visibleCols = new Set(DEFAULT_VISIBLE);
+    let offset = 0;
+    const LIMIT = 300;
 
     function setStatus(msg, isError=false){
       const el = $("statusText");
+      if (!el) return;
+      el.style.color = isError ? "#b42318" : "#027a48";
       el.textContent = msg || "";
-      el.classList.toggle("err", !!isError);
     }
 
     function escapeHtml(s) {
@@ -305,135 +167,96 @@
       const minScore = parseInt($("minScore").value || "0", 10);
       const riskLevel = ($("riskLevel").value || "ALL").toUpperCase();
       const q = ($("searchUser").value || "").trim().toLowerCase();
-      const maxRender = Math.max(100, parseInt($("maxRender").value || "5000", 10));
 
-      const filtered = rows.filter(r => {
+      return rows.filter(r => {
         const rs = Number(r.riskScore || 0);
         if (rs < minScore) return false;
+
         if (riskLevel !== "ALL" && (String(r.riskLevel || "").toUpperCase() !== riskLevel)) return false;
+
         if (q && !String(r.username || "").toLowerCase().includes(q)) return false;
+
         return true;
-      });
-
-      return filtered.slice(0, maxRender);
-    }
-
-    function renderHeader(){
-      const tr = $("theadRow");
-      tr.innerHTML = "";
-
-      COLUMNS.forEach(col => {
-        if (!visibleCols.has(col.key)) return;
-
-        const th = document.createElement("th");
-        th.textContent = col.label;
-
-        if (col.stickyLeft) th.classList.add("stickyLeft");
-        if (col.className) th.classList.add(col.className);
-
-        tr.appendChild(th);
       });
     }
 
     function renderTable(){
-      const compact = $("compactMode").value === "1";
-      $("tbl").classList.toggle("compact", compact);
-
-      renderHeader();
-
       const tbody = $("tableBody");
+      if(!tbody) return;
       const rows = applyClientFilters(allRows);
 
       tbody.innerHTML = "";
-      for (const r of rows) {
+      rows.forEach(r => {
         const tr = document.createElement("tr");
-
-        COLUMNS.forEach(col => {
-          if (!visibleCols.has(col.key)) return;
-
-          const td = document.createElement("td");
-          if (col.stickyLeft) td.classList.add("stickyLeft");
-          if (col.className) td.classList.add(col.className);
-
-          const v = r[col.key];
-
-          if (col.key === "riskLevel") {
-            td.innerHTML = pill(v);
-          } else {
-            td.innerHTML = escapeHtml(v ?? "");
-          }
-
-          tr.appendChild(td);
-        });
-
+        tr.innerHTML = `
+          <td>${escapeHtml(r.username)}</td>
+          <td>${escapeHtml(r.lastActivityAt || "")}</td>
+          <td><b>${escapeHtml(r.riskScore)}</b></td>
+          <td>${pill(r.riskLevel)}</td>
+          <td class="muted">${escapeHtml(r.reasons || "")}</td>
+          <td>${escapeHtml(r.totalDeposit)}</td>
+          <td>${escapeHtml(r.totalWithdrawal)}</td>
+          <td>${escapeHtml(r.net)}</td>
+          <td>${escapeHtml(r.depositCnt)}</td>
+          <td>${escapeHtml(r.withdrawCnt)}</td>
+          <td>${escapeHtml(r.uniqueBanks)}</td>
+          <td>${escapeHtml(r.sharedBankUsers)}</td>
+          <td>${escapeHtml(r.sharedIpUsers)}</td>
+          <td>${escapeHtml(r.fastWithdraw)}</td>
+          <td>${escapeHtml(r.accountStatus)}</td>
+          <td>${escapeHtml(r.vip)}</td>
+        `;
         tbody.appendChild(tr);
-      }
+      });
 
-      const showCount = rows.length;
-      const totalLoaded = allRows.length;
-      const totalTxt = (typeof totalMatches === "number") ? ` of ${totalMatches}` : "";
-      const loadingTxt = isLoading ? " (loading...)" : "";
-
-      setStatus(`Loaded ${totalLoaded}${totalTxt} | Showing ${showCount}${loadingTxt}`, false);
+      setStatus(`Loaded ${allRows.length} rows (showing ${rows.length})`, false);
     }
 
     async function loadAllPages(){
-      isLoading = true;
-      totalMatches = null;
+      offset = 0;
       allRows = [];
       renderTable();
 
-      const days = Math.max(1, parseInt($("days").value || "3", 10));
-      const apiMinScore = 1; // ✅ load all suspects then filter locally
+      const minScore = parseInt($("minScore").value || "3", 10);
 
-      let offset = 0;
+      setStatus("Loading...", false);
 
-      try {
-        while (true) {
-          const url = buildUrl({
-            format: "json",
-            days,
-            minScore: apiMinScore,
-            limit: LIMIT,
-            offset
-          });
+      while(true){
+        const url = buildUrl({
+          format: "json",
+          minScore,
+          days: 3,        // ✅ fixed days = 3 (change later if needed)
+          limit: LIMIT,
+          offset
+        });
 
-          const data = await fetchJson(url);
-          if(!data || data.ok !== true) throw new Error(data?.error || "API error");
+        const data = await fetchJson(url);
 
-          if (typeof data.total_matches === "number") totalMatches = data.total_matches;
-
-          const rows = Array.isArray(data.rows) ? data.rows : [];
-          allRows = allRows.concat(rows);
-          offset += rows.length;
-
-          // render progressively
-          renderTable();
-
-          if (!data.has_more) break;
-
-          // safety stop to avoid browser freeze on huge datasets
-          if (allRows.length >= 60000) {
-            setStatus(`Stopped at 60,000 rows to avoid browser crash. Increase Min Risk Score or reduce Days.`, true);
-            break;
-          }
+        if(!data || data.ok !== true){
+          throw new Error(data?.error || "API error");
         }
 
-        isLoading = false;
-        renderTable();
-        setStatus(`DONE ✅ Loaded ${allRows.length}${(typeof totalMatches === "number") ? " of " + totalMatches : ""} | Adjust filters to narrow down`, false);
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows = allRows.concat(rows);
+        offset += rows.length;
 
-      } catch (err) {
-        isLoading = false;
-        setStatus("Error: " + err.message, true);
+        renderTable();
+
+        if(!data.has_more) break;
       }
+
+      setStatus(`DONE ✅ Total ${allRows.length} rows`, false);
     }
 
     function exportCSV(){
       const rows = applyClientFilters(allRows);
 
-      const cols = COLUMNS.filter(c => visibleCols.has(c.key));
-      const headers = cols.map(c => c.key);
+      const headers = [
+        "username","lastActivityAt",
+        "riskScore","riskLevel","reasons","totalDeposit","totalWithdrawal","net",
+        "depositCnt","withdrawCnt","uniqueBanks","sharedBankUsers","sharedIpUsers",
+        "fastWithdraw","accountStatus","vip"
+      ];
 
       const lines = [];
       lines.push(headers.join(","));
@@ -455,83 +278,20 @@
       URL.revokeObjectURL(url);
     }
 
-    function buildColumnChooser(){
-      const panel = $("colsPanel");
-      panel.innerHTML = `
-        <div style="display:flex; gap:8px; margin-bottom:10px;">
-          <button id="showAllBtn" style="flex:1;">Show All</button>
-          <button id="hideSomeBtn" style="flex:1;">Fit Screen</button>
-        </div>
-        <div class="smallmuted" style="margin-bottom:8px;">
-          Tip: Use “Fit Screen” to hide less important columns.
-        </div>
-      `;
-
-      COLUMNS.forEach(col => {
-        const row = document.createElement("div");
-        row.className = "chkRow";
-
-        const chk = document.createElement("input");
-        chk.type = "checkbox";
-        chk.checked = visibleCols.has(col.key);
-        chk.addEventListener("change", () => {
-          if (chk.checked) visibleCols.add(col.key);
-          else visibleCols.delete(col.key);
-          renderTable();
-        });
-
-        const txt = document.createElement("div");
-        txt.textContent = col.label;
-
-        row.appendChild(chk);
-        row.appendChild(txt);
-        panel.appendChild(row);
-      });
-
-      // Buttons
-      panel.querySelector("#showAllBtn").addEventListener("click", () => {
-        visibleCols = new Set(COLUMNS.map(c => c.key));
-        renderTable();
-        buildColumnChooser();
-      });
-
-      panel.querySelector("#hideSomeBtn").addEventListener("click", () => {
-        // “Fit Screen” preset: keep the most useful columns
-        visibleCols = new Set([
-          "username","lastActivityAt","riskScore","riskLevel","reasons",
-          "totalDeposit","totalWithdrawal","net",
-          "depositCnt","withdrawCnt",
-          "sharedBankUsers","sharedIpUsers","fastWithdraw"
-        ]);
-        renderTable();
-        buildColumnChooser();
-      });
-    }
-
-    // events
+    // ✅ events
     window.addEventListener("DOMContentLoaded", () => {
-      buildColumnChooser();
-      renderHeader();
+      $("reloadBtn").addEventListener("click", () => {
+        loadAllPages().catch(err => setStatus("Error: " + err.message, true));
+      });
 
-      $("reloadBtn").addEventListener("click", loadAllPages);
       $("exportBtn").addEventListener("click", exportCSV);
 
       $("minScore").addEventListener("input", renderTable);
       $("riskLevel").addEventListener("change", renderTable);
       $("searchUser").addEventListener("input", renderTable);
-      $("maxRender").addEventListener("input", renderTable);
-      $("compactMode").addEventListener("change", renderTable);
 
-      // Column chooser toggle
-      const btn = $("colsBtn");
-      const panel = $("colsPanel");
-      btn.addEventListener("click", () => panel.classList.toggle("open"));
-      document.addEventListener("click", (e) => {
-        if (!e.target.closest(".chooser")) panel.classList.remove("open");
-      });
-
-      // Auto load
-      loadAllPages();
+      // auto load on open
+      loadAllPages().catch(err => setStatus("Error: " + err.message, true));
     });
   </script>
 </body>
